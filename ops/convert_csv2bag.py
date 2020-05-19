@@ -65,7 +65,8 @@ def write_imu_gps_bag(dataset_bag, dirpath, dirnames, filenames):
                                 current_stamp = rospy.Time.from_sec(float(imu_df['GPSTime(sow)'][row]))
                             
                             stamp_diff = current_stamp - first_stamp
-                            timestamp = global_imu_stamp + stamp_diff  
+                            timestamp = global_imu_stamp + stamp_diff
+                              
                             imu_msg.header.frame_id = "imu_link"
                             imu_msg.header.stamp = timestamp                                
                             quaternion = quaternion_from_euler(imu_df['Roll(rad)'][row], imu_df['Pitch(rad)'][row], imu_df['Yaw(rad)'][row])
