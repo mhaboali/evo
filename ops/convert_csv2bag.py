@@ -42,60 +42,52 @@ def write_imu_gps_bag(dataset_bag, dirpath, dirnames, filenames):
         imu_msg = Imu()
         gps_msg = NavSatFix()
         pose_msg = PoseStamped()
-        imu_flag = 0 ## 2 means imu msg gets compeleted.
         gps_flag = 0 ## 2 means gps msg gets compeleted.
         for f in filenames:            
-            if imu_flag == 2:
-                imu_msg = Imu()
             if ".csv" in f:                        
                 if "IMU-v4" in f and "~" not in f:
-                    ## IMU Topic                             
-                    if "_track" in f:
-                        imu_flag+=2
-                        print("#####\nIMU-Track IF \n##########\n")
-                        imu_df = pd.read_csv(dirpath+'/'+f) 
-                    else:
-                        print("#####\nIMUx IF \n##########\n")
-                        imu_raw_df = pd.read_csv(dirpath+'/'+f)
-                        imu_flag+=1
+                    ## IMU Topic              
+                    imu_msg = Imu()               
+                    print("#####\nIMU-Track IF \n##########\n")
+                    imu_df = pd.read_csv(dirpath+'/'+f)                     
                     first_stamp = 0
                     current_stamp = 0
-                    if imu_flag == 2:  
-                        for row in range(imu_df.shape[0]):  
-                            if row == 0:
-                                first_stamp = rospy.Time.from_sec(float(imu_df['GPSTime(sec)'][row]))
-                                current_stamp = rospy.Time.from_sec(float(imu_df['GPSTime(sec)'][row]))
-                            else:
-                                current_stamp = rospy.Time.from_sec(float(imu_df['GPSTime(sec)'][row]))
-                            
-                            stamp_diff = current_stamp - first_stamp
-                            timestamp = global_imu_stamp + stamp_diff
-                              
-                            imu_msg.header.frame_id = "imu_link"
-                            imu_msg.header.stamp = timestamp                                
-                            quaternion = quaternion_from_euler(imu_df['Roll(rad)'][row], imu_df['Pitch(rad)'][row], imu_df['Yaw(rad)'][row])
-
-                            # Populate the data elements for IMU
-                            imu_msg.orientation.x = quaternion[0]
-                            imu_msg.orientation.y = quaternion[1]
-                            imu_msg.orientation.z = quaternion[2]
-                            imu_msg.orientation.w = quaternion[3]
-                            
-                            imu_msg.angular_velocity.x = imu_df['AngVelocityX(rad/s)'][row]
-                            imu_msg.angular_velocity.y = imu_df['AngVelocityY(rad/s)'][row]
-                            imu_msg.angular_velocity.z = imu_df['AngVelocityZ(rad/s)'][row]
-
-                            imu_msg.linear_acceleration.x = imu_df['Accel_X(m/s²)'][row]
-                            imu_msg.linear_acceleration.y = imu_df['Accel_Y(m/s²)'][row]
-                            imu_msg.linear_acceleration.z = imu_df['Accel_Z(m/s²)'][row]                                                                                                                                                        
-                            # if dataset_bag.get_message_count() <= velodyne_bag.get_message_count():
-                            trj_bag.write("/imu/data", imu_msg, t=timestamp)
-                            dataset_bag.write("/imu/data", imu_msg, t=timestamp)
+                    for row in range(imu_df.shape[0]):  
+                        if row == 0:
+                            first_stamp = rospy.Time.from_sec(float(imu_df['GPSTime(sec)'][row]))
+                            current_stamp = rospy.Time.from_sec(float(imu_df['GPSTime(sec)'][row]))
+                        else:
+                            current_stamp = rospy.Time.from_sec(float(imu_df['GPSTime(sec)'][row]))
                         
-                        # print(f)
-                        global_imu_stamp = timestamp
-                        # print(global_imu_stamp.to_sec())
+                        stamp_diff = current_stamp - first_stamp
+                        timestamp = global_imu_stamp + stamp_diff
+                            
+                        imu_msg.header.frame_id = "imu_link"
+                        imu_msg.header.stamp = timestamp                                
+                        quaternion = quaternion_from_euler(imu_df['Roll(rad)'][row], imu_df['Pitch(rad)'][row], imu_df['Yaw(rad)'][row])
+
+                        # Populate the data elements for IMU
+                        imu_msg.orientation.x = quaternion[0]
+                        imu_msg.orientation.y = quaternion[1]
+                        imu_msg.orientation.z = quaternion[2]
+                        imu_msg.orientation.w = quaternion[3]
+                        
+                        imu_msg.angular_velocity.x = imu_df['AngVelocityX(rad/s)'][row]
+                        imu_msg.angular_velocity.y = imu_df['AngVelocityY(rad/s)'][row]
+                        imu_msg.angular_velocity.z = imu_df['AngVelocityZ(rad/s)'][row]
+
+                        imu_msg.linear_acceleration.x = imu_df['Accel_X(m/s²)'][row]
+                        imu_msg.linear_acceleration.y = imu_df['Accel_Y(m/s²)'][row]
+                        imu_msg.linear_acceleration.z = imu_df['Accel_Z(m/s²)'][row]                                                                                                                                                        
+                        # if dataset_bag.get_message_count() <= velodyne_bag.get_message_count():
+                        trj_bag.write("/imu/data", imu_msg, t=timestamp)
+                        dataset_bag.write("/imu/data", imu_msg, t=timestamp)
+                        
+                    # print(f)
+                    global_imu_stamp = timestamp
+                    # print(global_imu_stamp.to_sec())
                 elif "GPS" in f and "~" not in f:
+                    gps_msg = NavSatFix()
                     if "VRS-"  in f:
                         print("#####\nVRS-GPS IF \n##########\n")
                         gps_df = pd.read_csv(dirpath+'/'+f) 
@@ -133,7 +125,7 @@ def write_imu_gps_bag(dataset_bag, dirpath, dirnames, filenames):
                             dataset_bag.write("/navsat/fix", gps_msg, t=timestamp)
                         # print(f)
                         global_gps_stamp = timestamp
-                        # print(global_gps_stamp.to_sec())
+                        # print(global_gps_stamp.to_sec())                    
                 elif "GT-v4" in f and "~" not in f:
                     ## gt Topic              
                     pose_msg = PoseStamped()
@@ -175,17 +167,13 @@ def write_imu_gps_bag(dataset_bag, dirpath, dirnames, filenames):
 
 def convert_gps2coordinates(lat, lon, alt):
     pass
-def write_gnd_truth():
-    pass
-    
+
 def main():
     with rosbag.Bag(INPUTS_PATH + '/all-imu-gps-data.bag', 'w') as dataset_bag:           
         for (dirpath, dirnames, filenames) in os.walk(INPUTS_PATH):
             if dirpath != INPUTS_PATH:
                 write_imu_gps_bag(dataset_bag, dirpath, dirnames, filenames)
-            print("#####\nFinished" + dirpath +  "\n##########\n")
-
-                        
+            print("#####\nFinished" + dirpath +  "\n##########\n")         
                     
 
 if __name__ == '__main__':
