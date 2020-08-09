@@ -10,7 +10,9 @@ import sys
 import rospy
 import rosbag
 from sensor_msgs.msg import Imu, NavSatFix
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, TransformStamped
+from nav_msgs.msg import Odometry 
+from tf2_msgs.msg import TFMessage
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 
 import math
@@ -19,7 +21,7 @@ import math
 INPUTS_PATH = "/media/phoenix/d2c96e98-3834-45b5-93dc-d99a3d923130/downloads/01_ph_ds/ros-ds/inputs"
 GT_PATH = "/media/phoenix/d2c96e98-3834-45b5-93dc-d99a3d923130/downloads/01_ph_ds/ros-ds/gnd_truth"
 RESULTS_PATH = "/media/phoenix/d2c96e98-3834-45b5-93dc-d99a3d923130/downloads/01_ph_ds/ros-ds/results"
-PC_BAG_PATH = INPUTS_PATH + '/vlp16_070815_pointcloud_2020-05-16-08-31-18.bag'
+PC_BAG_PATH = INPUTS_PATH + '/vlp16_070815_pointcloud_no_scan.bag'
 velodyne_bag = rosbag.Bag(PC_BAG_PATH)
 global_initial_stamp = rospy.Time()
 global_imu_stamp = rospy.Time()
@@ -42,6 +44,7 @@ def write_imu_gps_bag(dataset_bag, dirpath, dirnames, filenames):
         imu_msg = Imu()
         gps_msg = NavSatFix()
         pose_msg = PoseStamped()
+        odom_msg = Odometry()
         gps_flag = 0 ## 2 means gps msg gets compeleted.
         for f in filenames:            
             if ".csv" in f:                        
@@ -83,6 +86,48 @@ def write_imu_gps_bag(dataset_bag, dirpath, dirnames, filenames):
                         trj_bag.write("/imu/data", imu_msg, t=timestamp)
                         dataset_bag.write("/imu/data", imu_msg, t=timestamp)
                         
+                        ## Publish here the static TFs
+                        tf2_msgs = TFMessage()
+                        ## Velodyne -> Base_link
+                        static_transformStamped_velodyne = TransformStamped()
+
+                        static_transformStamped_velodyne.header.stamp = timestamp
+                        static_transformStamped_velodyne.header.frame_id = "base_link"
+                        static_transformStamped_velodyne.child_frame_id = "velodyne"
+                        static_transformStamped_velodyne.transform.translation.x = 0
+                        static_transformStamped_velodyne.transform.translation.y = 0
+                        static_transformStamped_velodyne.transform.translation.z = 0
+
+                        quat = quaternion_from_euler(
+                                float(0),float(),float(1.57079))
+                        static_transformStamped_velodyne.transform.rotation.x = quat[0]
+                        static_transformStamped_velodyne.transform.rotation.y = quat[1]
+                        static_transformStamped_velodyne.transform.rotation.z = quat[2]
+                        static_transformStamped_velodyne.transform.rotation.w = quat[3]
+                        tf2_msgs.transforms.append(static_transformStamped_velodyne)
+
+                        ## IMU -> Base_link
+                        static_transformStamped_imu = TransformStamped()
+
+                        static_transformStamped_imu.header.stamp = timestamp
+                        static_transformStamped_imu.header.frame_id = "base_link"
+                        static_transformStamped_imu.child_frame_id = "imu_link"
+                        static_transformStamped_imu.transform.translation.x = 0.0740
+                        static_transformStamped_imu.transform.translation.y = 0.0133
+                        static_transformStamped_imu.transform.translation.z = 0.108
+
+                        quat = quaternion_from_euler(
+                                float(-1.57079),float(0),float(4.712388))
+                        static_transformStamped_imu.transform.rotation.x = quat[0]
+                        static_transformStamped_imu.transform.rotation.y = quat[1]
+                        static_transformStamped_imu.transform.rotation.z = quat[2]
+                        static_transformStamped_imu.transform.rotation.w = quat[3]                       
+                        tf2_msgs.transforms.append(static_transformStamped_imu)
+
+                        trj_bag.write("/tf_static", tf2_msgs, t=timestamp)
+                        dataset_bag.write("/tf_static", tf2_msgs, t=timestamp)
+                        
+                        ##############################
                     # print(f)
                     global_imu_stamp = timestamp
                     # print(global_imu_stamp.to_sec())
@@ -126,7 +171,7 @@ def write_imu_gps_bag(dataset_bag, dirpath, dirnames, filenames):
                         # print(f)
                         global_gps_stamp = timestamp
                         # print(global_gps_stamp.to_sec())                    
-                elif "GT-v4" in f and "~" not in f:
+                elif "GT-v5" in f and "~" not in f:
                     ## gt Topic              
                     pose_msg = PoseStamped()
                     print("#####\nGT-Track IF \n##########\n")
@@ -144,7 +189,8 @@ def write_imu_gps_bag(dataset_bag, dirpath, dirnames, filenames):
                         timestamp = global_gt_stamp + stamp_diff
                             
                         pose_msg.header.frame_id = "imu_link"
-                        pose_msg.header.stamp = timestamp                                
+                        pose_msg.header.stamp = timestamp    
+                        odom_msg.header = pose_msg.header                            
                         quaternion = quaternion_from_euler(gt_df['Roll(rad)'][row], gt_df['Pitch(rad)'][row], gt_df['Yaw(rad)'][row])
 
                         # Populate the data elements for IMU
@@ -156,11 +202,15 @@ def write_imu_gps_bag(dataset_bag, dirpath, dirnames, filenames):
                         pose_msg.pose.position.x = gt_df['X(m)'][row]
                         pose_msg.pose.position.y = gt_df['Y(m)'][row]
                         pose_msg.pose.position.z = gt_df['Z(m)'][row]
-                                                                                                                                                                             
+
+                        odom_msg.pose.pose = pose_msg.pose                                                                                                                                            
                         # if dataset_bag.get_message_count() <= velodyne_bag.get_message_count():
                         trj_bag.write("/gt/pose_stamped", pose_msg, t=timestamp)
                         dataset_bag.write("/gt/pose_stamped", pose_msg, t=timestamp)
                         
+                        trj_bag.write("/gt/odometry", odom_msg, t=timestamp)
+                        dataset_bag.write("/gt/odometry", odom_msg, t=timestamp)
+
                     # print(f)
                     global_gt_stamp = timestamp
                     # print(global_gt_stamp.to_sec())
